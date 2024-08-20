@@ -5,7 +5,7 @@ import os
 import sys
 from functools import partial
 
-lib_path = "W:\\MTHD_core\\inhouse\\maya\\site-packages"
+lib_path = "\\\\192.168.10.190\\substorage2\\MTHD_core\\inhouse\\maya\\site-packages"
 if not lib_path in sys.path:
     sys.path.append(lib_path)
 import qdarktheme
@@ -263,9 +263,13 @@ class ReferenceChanger(QMainWindow):
             else:
                 change_data[original.replace(os.sep, "/")] = new.replace(os.sep, "/")
                 message += f"{idx + 1}. {os.path.basename(original)} -> {os.path.basename(new)}\n"
+                
+        if not self.ma_file_le.text():
+            QMessageBox.warning(self, "Error", "Please select a file")
+            return
         
         if not change_data:
-            QMessageBox.information(self, "Information", "No change detected")
+            QMessageBox.warning(self, "Error", "Nothing to change")
             return
         
         confirm = QMessageBox.question(
@@ -302,13 +306,12 @@ class ReferenceChanger(QMainWindow):
         """
         if changed:
             self.change_progress.close()
-            QMessageBox.information(self, "Information", "Reference path changed")
+            QMessageBox.information(self, "Success", "Reference path changed successfully")
             self.load_file()
         else:
             self.change_progress.close()
             QMessageBox.critical(self, "Error", message)
                 
-        
     def closeEvent(self, event):
         if self.load_thread_running:
             self.load_thread.cancel()
