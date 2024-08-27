@@ -29,7 +29,7 @@ class ReferenceChanger(QMainWindow):
         
     def setup_ui(self):
         self.setWindowTitle("Reference Changer")
-        self.setMinimumSize(1000, 600)
+        self.setMinimumSize(1100, 600)
         self.setWindowIcon(QIcon("./icon.png"))
         self.font = QFont("Segoe UI", 10)
         QApplication.setFont(self.font)
@@ -40,8 +40,8 @@ class ReferenceChanger(QMainWindow):
         self.main_widget = QWidget()
         self.ma_file_lb = QLabel("File")
         self.ma_file_le = QLineEdit()
-        self.ma_file_browse_btn = QPushButton("...")
-        self.ma_file_browse_btn.setFixedWidth(30)
+        self.ma_file_browse_btn = QPushButton("Load")
+        self.ma_file_browse_btn.setFixedSize(80, 30)
         
         # Reference
         self.table_widget = QTableWidget()
@@ -49,9 +49,9 @@ class ReferenceChanger(QMainWindow):
         # Buttons
         self.hspacer = QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.reset_btn = QPushButton("Reset")
-        self.reset_btn.setFixedSize(100, 30)
+        self.reset_btn.setFixedSize(80, 30)
         self.start_btn = QPushButton("Start")
-        self.start_btn. setFixedSize(100, 30)
+        self.start_btn. setFixedSize(80, 30)
     
     def set_layout(self):
         main_layout = QVBoxLayout()
@@ -143,12 +143,13 @@ class ReferenceChanger(QMainWindow):
         self.load_thread_running = False
         QMessageBox.information(self, "Canceled", "File loading canceled")
         
-    def load_finished(self, found_list: list):
+    def load_finished(self, found_list: list, found_list2: list):
         """
         If the references found, parse the data and set the data to the table widget
 
         Args:
             found_list (list): List of found references
+            found_list2 (list): List of found reference depth info
         """
         if not len(found_list):
             self.load_progress.canceled.disconnect()
@@ -160,66 +161,101 @@ class ReferenceChanger(QMainWindow):
                 self.load_progress.canceled.disconnect()
                 self.load_progress.close()
                 self.load_thread_running = False
-                self.parse_data(found_list)
+                self.parse_data(found_list, found_list2)
 
-    def parse_data(self, found_list: list):
+    def parse_data(self, found_list: list, found_list2: list):
         """
         Parse the found list and set the data to the table widget
 
         Args:
             found_list (list): List of found references
+            found_list2 (list): List of found reference depth info
         """
-        for idx, ref in enumerate(found_list):
+        combined_list = list(zip(found_list, found_list2)) ###
+        
+        # for idx, (ref, line_cnt) in enumerate(found_list):
+        for idx, ((ref_r, line_cnt_r), (ref_rdi, line_cnt_rdi)) in enumerate(combined_list):
             
-            # Get namespace, reference node, reference type and reference path
-            if "-ns" in ref:
-                namespace = ref.split("-ns")[-1].split('"')[1]
-            else:
-                namespace = "None"
-                
-            if "-rfn" in ref:
-                ref_node = ref.split("-rfn")[-1].split()[0].replace('"', '')
-            else:
-                ref_node = "None"
-                
-            if "-typ" in ref:
-                ref_list = ref.split("-typ")[-1].split()
-                ref_list = list(map(lambda x: x.replace('"', ''), ref_list))
-                ref_type = ref_list[0]
-                ref_path = ref_list[1].replace(';', '')
-            else:
-                ref_type = "None"
-                ref_path = "None"
+            namespace = ref_r.split("-ns")[-1].split('"')[1] if "-ns" in ref_r else "None"
+            ref_node = ref_r.split("-rfn")[-1].split()[0].replace('"', '') if "-rfn" in ref_r else "None"
+            ref_type = ref_r.split("-typ")[-1].split()[0].replace('"', '') if "-typ" in ref_r else "None"
+            ref_path_r = ref_r.split("-typ")[-1].split()[1].replace(';', '') if "-typ" in ref_r else "None"
+            ref_path_rdi = ref_rdi.split("-typ")[-1].split()[1].replace(';', '') if "-typ" in ref_rdi else "None"
+            
             
             self.ref_data[idx] = {
+                "found_line_r": line_cnt_r,
+                "found_line_rdi": line_cnt_rdi,
                 "namespace": namespace,
                 "ref_node": ref_node,
                 "ref_type": ref_type,
-                "ref_path": ref_path
-                }
-
-        self.table_widget.setColumnCount(5)
+                "ref_path_r": ref_path_r.replace('"', ''),
+                "ref_path_rdi": ref_path_rdi
+            }
+            
+        self.table_widget.setColumnCount(6)
         self.table_widget.setHorizontalHeaderLabels(
-            ["Namespace", "Reference Node", "Reference Type", "Reference Path", "Update Path"]
+            ["Found Line", "Namespace", "Reference Node", "Reference Type", "Reference Path", "Update Path"]
             )
         self.table_widget.setRowCount(len(self.ref_data))
         
         for idx, data in self.ref_data.items():
-            self.table_widget.setItem(idx, 0, QTableWidgetItem(data["namespace"]))
-            self.table_widget.setItem(idx, 1, QTableWidgetItem(data["ref_node"]))
-            self.table_widget.setItem(idx, 2, QTableWidgetItem(data["ref_type"]))
-            self.table_widget.setItem(idx, 3, QTableWidgetItem(data["ref_path"]))
+            self.table_widget.setItem(idx, 0, QTableWidgetItem(str(data["found_line_r"])))
+            self.table_widget.setItem(idx, 1, QTableWidgetItem(data["namespace"]))
+            self.table_widget.setItem(idx, 2, QTableWidgetItem(data["ref_node"]))
+            self.table_widget.setItem(idx, 3, QTableWidgetItem(data["ref_type"]))
+            self.table_widget.setItem(idx, 4, QTableWidgetItem(data["ref_path_r"]))
             self.table_widget.setRowHeight(idx, 30)
             
             # Create and add a button to the 4th column
             update_btn = QPushButton("Browse")
             update_btn.clicked.connect(partial(self.browse_file_for_row, idx))
-            self.table_widget.setCellWidget(idx, 4, update_btn)
+            self.table_widget.setCellWidget(idx, 5, update_btn)
 
         self.table_widget.resizeColumnsToContents()
         self.table_widget.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table_widget.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table_widget.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table_widget.hideColumn(0)
+        
+        # if right click, shot context menu
+        self.table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table_widget.customContextMenuRequested.connect(self.show_context_menu)
     
+    def show_context_menu(self, pos):
+        """
+        Show context menu for the table widget
+
+        Args:
+            pos (QPoint): Position of the mouse
+        """
+        context_menu = QMenu()
+        update_action = context_menu.addAction("Update Reference")
+        action = context_menu.exec_(self.table_widget.mapToGlobal(pos))
+        selected = self.table_widget.selectedItems()
+        selected_rows = list(set([item.row() for item in selected]))
+        if not len(selected_rows):
+            return
+        
+        if action == update_action:
+            start_path = os.path.dirname(self.table_widget.item(selected_rows[0], 4).text()).replace("/", os.sep).replace('"', '')
+            print(start_path)
+            file, _ = QFileDialog.getOpenFileName(
+                self, 
+                "Open File", 
+                start_path,
+                "Maya Scene Files (*.ma *mb);; Maya ASCII Files (*.ma);; Maya Binary Files (*.mb)"
+            )
+            if file:
+                for row in selected_rows:
+                    self.table_widget.setItem(row, 4, QTableWidgetItem(file))
+                    self.table_widget.item(row, 4).setTextColor(QColor(0, 220, 0))
+                    if file.endswith(".ma"):
+                        self.table_widget.item(row, 3).setText("mayaAscii")
+                        self.table_widget.item(row, 3).setTextColor(QColor(0, 220, 0))
+                    elif file.endswith(".mb"):
+                        self.table_widget.item(row, 3).setText("mayaBinary")
+                        self.table_widget.item(row, 3).setTextColor(QColor(0, 220, 0))
+                    
     def browse_file_for_row(self, row: int):
         """
         Browse file for the selected row
@@ -230,45 +266,50 @@ class ReferenceChanger(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self, 
             "Open File", 
-            os.path.dirname(self.table_widget.item(row, 3).text()),
-            "Maya Scene Files (*.ma *.mb);;Maya ASCII Files (*.ma);;Maya Binary Files (*.mb)"
+            os.path.dirname(self.table_widget.item(row, 4).text()),
+            "Maya Binary Files (*.mb)"
             )
         file_path = file_path.replace("/", os.sep)
         
         if not file_path:
             return
         
-        self.table_widget.setItem(row, 3, QTableWidgetItem(file_path))
-        
+        self.table_widget.setItem(row, 4, QTableWidgetItem(file_path))
+        self.table_widget.item(row, 4).setTextColor(QColor(0, 220, 0))
+        if file_path.endswith(".ma"):
+            self.table_widget.item(row, 3).setText("mayaAscii")
+            self.table_widget.item(row, 3).setTextColor(QColor(0, 220, 0))
+        elif file_path.endswith(".mb"):
+            self.table_widget.item(row, 3).setText("mayaBinary")
+            self.table_widget.item(row, 3).setTextColor(QColor(0, 220, 0))
+    
     def update_reference(self):
         """
         Set the data to the reference path and update the reference path
         """
-        # Get original reference path
-        original_ref_path = []
-        for idx, data in self.ref_data.items():
-            original_ref_path.append(data["ref_path"])
-            
-        # Get new reference path
-        new_ref_path = []
-        for idx in range(self.table_widget.rowCount()):
-            new_ref_path.append(self.table_widget.item(idx, 3).text())
-            
-        # Compare original and new reference path
-        change_data = {}
+        change_data_r = {}
+        change_data_rdi = {}
         message = ""
-        for idx, (original, new) in enumerate(zip(original_ref_path, new_ref_path)):
-            if original == new:
-                continue
-            else:
-                change_data[original.replace(os.sep, "/")] = new.replace(os.sep, "/")
-                message += f"{idx + 1}. {os.path.basename(original)} -> {os.path.basename(new)}\n"
-                
+        
+        for idx in range(self.table_widget.rowCount()):
+            original_r = self.ref_data[idx]["ref_path_r"]
+            new_r = self.table_widget.item(idx, 4).text()
+            original_rdi = self.ref_data[idx]["ref_path_rdi"]
+            new_rdi = self.table_widget.item(idx, 4).text()
+            
+            if original_r != new_r:
+                line_number_r = self.ref_data[idx]["found_line_r"]
+                change_data_r[line_number_r] = (original_r.replace(os.sep, "/"), new_r.replace(os.sep, "/"))
+                line_number_rdi = self.ref_data[idx]["found_line_rdi"]
+                change_data_rdi[line_number_rdi] = (original_rdi.replace(os.sep, "/"), new_rdi.replace(os.sep, "/"))
+                message += f"{idx + 1}. {os.path.basename(original_r)} -> {os.path.basename(new_r)}\n"
+
+
         if not self.ma_file_le.text():
             QMessageBox.warning(self, "Error", "Please select a file")
             return
         
-        if not change_data:
+        if not change_data_r and not change_data_rdi:
             QMessageBox.warning(self, "Error", "Nothing to change")
             return
         
@@ -276,15 +317,15 @@ class ReferenceChanger(QMainWindow):
             self, 
             "Change Reference", 
             f"""
-            Are you sure you want to change the reference path?
+    Are you sure you want to change the reference path?
             
-            {message}
-            """, 
+    {message}
+    """, 
             QMessageBox.Yes | QMessageBox.No
             )
         
         if confirm == QMessageBox.Yes:
-            self.change_thread = FileChangeThread(change_data, self.ma_file_le.text())
+            self.change_thread = FileChangeThread(change_data_r, change_data_rdi, self.ma_file_le.text())
             self.change_thread.file_changed.connect(self.change_finished)
             self.change_thread.start()
             
@@ -324,35 +365,45 @@ class FileChangeThread(QThread):
     """
     file_changed = Signal(bool, str)
     
-    def __init__(self, change_data: dict, ma_file: str):
+    def __init__(self, change_data_r: dict, change_data_rdi:dict, ma_file: str):
         super(FileChangeThread, self).__init__()
-        self.change_data = change_data
+        self.change_data_r = change_data_r
+        self.change_data_rdi = change_data_rdi
         self.ma_file = ma_file
+        self.backup_file = ma_file.replace(".ma", "_low.ma")
         self.is_canceled = False
         
     def run(self):
         try:
+            # copy original file to backup file
+            if not os.path.exists(self.backup_file):
+                with open(self.ma_file, "r") as original:
+                    with open(self.backup_file, "w") as backup:
+                        backup.write(original.read())
+            
             with open(self.ma_file, "r") as f:
-                if self.is_canceled:
-                    return
                 lines = f.readlines()
-                
+            
             with open(self.ma_file, "w") as f:
-                if self.is_canceled:
-                    return
-                buffer = ""
-                for line in lines:
-                    if self.is_canceled:
-                        break
-                    buffer += line
-                    if ";" in line:
-                        for original, new in self.change_data.items():
-                            if original in buffer:
-                                buffer = buffer.replace(original, new)
-                    else:
-                        f.write(line)
+                for idx, line in enumerate(lines):
+                    if idx in self.change_data_r:
+                        original, new = self.change_data_r[idx]
+                        line = line.replace(original, f'"{new}"')
+                        if new.endswith(".ma"):
+                            line = line.replace("mayaBinary", "mayaAscii")
+                        elif new.endswith(".mb"):
+                            line = line.replace("mayaAscii", "mayaBinary")
+                    if idx in self.change_data_rdi:
+                        original, new = self.change_data_rdi[idx]
+                        line = line.replace(original, f'"{new}"')
+                        if new.endswith(".ma"):
+                            line = line.replace("mayaBinary", "mayaAscii")
+                        elif new.endswith(".mb"):
+                            line = line.replace("mayaAscii", "mayaBinary")
+                    f.write(line)
                 
             self.file_changed.emit(True, "")
+            
         except Exception as e:
             self.file_changed.emit(False, str(e))
             return
@@ -369,28 +420,31 @@ class FileLoadThread(QThread):
     """
     error_occurred = Signal(str)
     file_parsed = Signal(str)
-    ref_found = Signal(list)
+    ref_found = Signal(list, list)
 
     def __init__(self, ma_file):
         super(FileLoadThread, self).__init__()
         self.ma_file = ma_file
         self.is_canceled = False
         self.found_list = []
+        self.found_list2 = []
         
     def run(self):
         try:
             buffer = ""
             with open(self.ma_file, "r") as f:
-                for line in f:
+                for idx, line in enumerate(f):
                     if self.is_canceled:
                         break
-                    
                     buffer += line.strip()
+
                     if ";" in line:
                         if "file -r " in buffer:
-                            self.found_list.append(buffer)
+                            self.found_list.append((buffer, idx))
+                        if "file -rdi " in buffer:
+                            self.found_list2.append((buffer, idx))
                         buffer = ""
-            self.ref_found.emit(self.found_list)
+            self.ref_found.emit(self.found_list, self.found_list2)
 
         except Exception as e:
             self.error_occurred.emit(str(e))
